@@ -73,6 +73,8 @@ const Index = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
   const keysPressed = useRef<Set<string>>(new Set());
+  const touchStartRef = useRef<{x: number; y: number} | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
   
   const [player, setPlayer] = useState<Player>({
     x: 400,
@@ -87,6 +89,13 @@ const Index = () => {
   const [bullets, setBullets] = useState<Bullet[]>([]);
 
   const t = translations[language];
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile('ontouchstart' in window || navigator.maxTouchPoints > 0);
+    };
+    checkMobile();
+  }, []);
 
   const spawnEnemy = useCallback(() => {
     const newEnemy: Enemy = {
@@ -130,12 +139,47 @@ const Index = () => {
       keysPressed.current.delete(e.key.toLowerCase());
     };
 
+    const handleTouchStart = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!touchStartRef.current || gameState !== 'playing') return;
+      e.preventDefault();
+      
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - touchStartRef.current.x;
+      const deltaY = touch.clientY - touchStartRef.current.y;
+      
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      setPlayer(prev => ({
+        ...prev,
+        x: Math.max(0, Math.min(canvas.width - prev.width, prev.x + deltaX * 0.5)),
+        y: Math.max(0, Math.min(canvas.height - prev.height, prev.y + deltaY * 0.5))
+      }));
+      
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    };
+
+    const handleTouchEnd = () => {
+      touchStartRef.current = null;
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('touchstart', handleTouchStart, { passive: false });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
     };
   }, [gameState, shoot]);
 
@@ -379,10 +423,37 @@ const Index = () => {
             </div>
 
             <div className="text-center text-muted-foreground text-xs md:text-sm space-y-1">
-              <p>WASD / ← ↑ → ↓ - ДВИЖЕНИЕ</p>
-              <p>ПРОБЕЛ - ВЫСТРЕЛ</p>
-              <p>ESC - ПАУЗА</p>
+              {isMobile ? (
+                <>
+                  <p>ПЕРЕМЕЩАЙ ПАЛЬЦЕМ - ДВИЖЕНИЕ</p>
+                  <p>КНОПКА ОГОНЬ - ВЫСТРЕЛ</p>
+                  <p>КНОПКА ПАУЗА</p>
+                </>
+              ) : (
+                <>
+                  <p>WASD / ← ↑ → ↓ - ДВИЖЕНИЕ</p>
+                  <p>ПРОБЕЛ - ВЫСТРЕЛ</p>
+                  <p>ESC - ПАУЗА</p>
+                </>
+              )}
             </div>
+
+            {isMobile && (
+              <div className="fixed bottom-8 left-0 right-0 flex justify-between px-8 gap-4 z-50">
+                <Button
+                  onClick={shoot}
+                  className="w-20 h-20 rounded-full bg-primary hover:bg-primary/80 border-4 border-primary-foreground text-primary-foreground font-bold shadow-[0_0_20px_rgba(255,0,0,0.8)] active:scale-95 transition-all"
+                >
+                  <Icon name="Crosshair" size={32} />
+                </Button>
+                <Button
+                  onClick={() => setGameState('paused')}
+                  className="w-20 h-20 rounded-full bg-accent hover:bg-accent/80 border-4 border-accent-foreground text-accent-foreground font-bold shadow-[0_0_20px_rgba(0,255,0,0.8)] active:scale-95 transition-all"
+                >
+                  <Icon name="Pause" size={32} />
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
